@@ -1,7 +1,8 @@
 use std::error::Error;
 use std::fs::{File, FileType};
+use std::ops::Index;
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{result, thread};
 use std::thread::{JoinHandle};
 
 struct Lufthavn {
@@ -54,7 +55,13 @@ struct Terminal {
 }
 
 impl Terminal {
-    // mangler pickup_baggage(Rejsende, Kuffert)
+    fn pickup_baggage(&mut self, rejsende : &Rejsende, baggage: Kuffert) // tænker at vi skal bruge en mutable reference for at få fat i listen med rejsende og ændre den .
+    {
+        if let Some(i) = self.baggage.iter().position(|x| x.ejer_id == rejsende.id) {
+            self.baggage.remove(i);
+            println!("baggage taget fra rejsende med id: {}", rejsende.id)
+        }
+    }
 }
 
 #[derive(Debug)]
