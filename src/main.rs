@@ -32,7 +32,12 @@ struct Skranke {
 }
 
 impl Skranke {
-    // mangler LoadOnPlane(Kuffert, dest)
+    fn loadonplane(&mut self, baggage: Kuffert, dest : String) -> () {
+        if self.is_busy {
+            println!("den her skranke har dsv travlt: {}", self.id)
+        }
+
+    }
 }
 
 #[derive(Debug)]
@@ -40,6 +45,7 @@ struct Rejsende {
     id : u16,
     navn: String,
     kuffert: Option<Kuffert>,
+
 }
 
 impl Rejsende {
@@ -54,15 +60,16 @@ struct Terminal {
     baggage : Vec<Kuffert>
 }
 
+
 impl Terminal {
     fn pickup_baggage(&mut self, rejsende : &Rejsende, baggage: Kuffert) // tænker at vi skal bruge en mutable reference for at få fat i listen med rejsende og ændre den .
     {
         if let Some(i) = self.baggage.iter().position(|x| x.ejer_id == rejsende.id) {
             self.baggage.remove(i);
-            println!("baggage taget fra rejsende med id: {}", rejsende.id)
+            println!("baggage taget fra rejsende med id: {}! forsæt god ferie!", rejsende.id)
         }
     }
-}
+} 
 
 #[derive(Debug)]
 struct Kuffert {
