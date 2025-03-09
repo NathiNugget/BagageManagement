@@ -1,9 +1,13 @@
+use core::time;
+use rand::Rng;
 use std::error::Error;
 use std::fs::{File, FileType};
 use std::ops::Index;
 use std::sync::{Arc, Mutex};
 use std::{result, thread};
-use std::thread::{JoinHandle};
+use std::thread::{sleep, JoinHandle};
+
+
 
 struct Lufthavn {
     skranke: Vec<Skranke>,
@@ -16,6 +20,7 @@ struct Lufthavn {
     // mangler book impl
 }
 
+#[derive(Debug)]
 struct Fly {
     id : u16,
     passagere : Vec<Rejsende>,
@@ -24,18 +29,47 @@ struct Fly {
 
 impl Fly {
     // mangler metoder
+    fn new(id : u16, passagere : Vec<Rejsende>, baggage : Vec<Kuffert>) -> Self {
+        Fly{id, passagere, baggage}
+    
+    }
+    
+    fn load_baggage(&mut self, baggage: Kuffert) {
+        self.baggage.push(baggage);
+        println!("baggage er loaded på flyet! Baggage {:?}", self.baggage.last())
+    }
+
 }
 
+#[derive(Debug)]
 struct Skranke {
     id : u16,
     is_busy : bool,
 }
 
 impl Skranke {
-    fn loadonplane(&mut self, baggage: Kuffert, dest : String) -> () {
+    
+    fn new(id: u16) -> Self {
+        Skranke {id, is_busy: false} //
+    }
+    
+    fn load_on_plane(&mut self, baggage: Kuffert, dest : String, fly: &mut Fly) -> () {
         if self.is_busy {
-            println!("den her skranke har dsv travlt: {}", self.id)
+            println!("den her skranke har dsv travlt: {}", self.id);
+            return;
         }
+
+        self.is_busy = true;
+        let ejer_id_til_baggage =  baggage.ejer_id;
+        fly.load_baggage(baggage);
+        println!("Baggage med dest: {}, Ejerens id: {}, fly id: {}", dest, ejer_id_til_baggage, fly.id );
+
+
+        let mut rng = rand::thread_rng();
+        let random_delay_for_duration = rng.gen_range(100.. 500); // simulere virkeligheden i en lufthavn skranke hvor man aflevere baggage noget i den still
+        sleep(time::Duration::from_millis(random_delay_for_duration));
+        println!("Vente tiden {}, i milisek btw", random_delay_for_duration);
+        self.is_busy = false;
 
     }
 }
@@ -54,6 +88,7 @@ impl Rejsende {
     }
 }
 
+#[derive(Debug)]
 struct Terminal {
     id : u16,
     rejsende : Vec<Rejsende>,
