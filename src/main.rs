@@ -1,14 +1,16 @@
 use core::time;
+use std::fmt::format;
 use rand::Rng;
 use std::error::Error;
 use std::fs::{File, FileType};
 use std::ops::Index;
 use std::sync::{Arc, Mutex};
-use std::{result, thread};
+use std::{result, string, thread};
 use std::thread::{sleep, JoinHandle};
+use std::io::Write;
 
 
-
+#[derive(Debug)]
 struct Lufthavn {
     skranke: Vec<Skranke>,
     flights: Vec<Fly>,
@@ -17,21 +19,89 @@ struct Lufthavn {
     log : Arc<Mutex<Vec<String>>>,
     file: Arc<Mutex<File>>
 
-    // mangler book impl
+}
+
+impl Lufthavn {
+    fn new() -> Self {
+        Lufthavn {
+            skranke: Vec::new(),
+            flights: Vec::new(),
+            rejsende: Arc::new(Mutex::new(Vec::new())),
+            terminal: Arc::new(Mutex::new(Vec::new())),
+            log : Arc::new(Mutex::new(Vec::new())),
+            file: Arc::new(Mutex::new(File::create("flylog.txt").unwrap())),
+        }
+    }
+
+    fn log(&mut self, msg: String) {
+        match self.log.lock() {
+            Ok(mut log_vectoren) => {
+                log_vectoren.push(msg.clone());
+            }
+            Err(e) => {
+                println!("fail ved lock af log vec")
+            }
+        }
+        match self.file.lock() {
+            Ok(mut file) => {
+                if let Err(e) = writeln!(file, "{}", msg) {
+                    println!("fail ved skriving til fil...")
+                }
+            }
+
+            Err(e) => {
+                println!("fejl under locking af fil")
+
+            }
+        }
+        
+        println!("logged besked {}", msg);
+    }
+
+
+    fn book(&mut self, rejsende: Rejsende, dest : String) {
+        let need_name = rejsende.navn.clone(); // skulle bare se om det her virkede 
+
+        match self.rejsende.lock() {
+            Ok(mut rejsende_vec) => {
+                rejsende_vec.push(rejsende);
+            }
+            Err(e)=> {
+                println!("rejsende_liste tråden var forgifted !");
+                return;
+            }
+            
+        }
+        
+        match self.log.lock() {
+            Ok(mut log_vector) => {
+                log_vector.push(format!("booked person {}, til desitination {}", need_name, dest));
+            }
+
+            Err(e) => {
+                println!("log tråden var forgifted")
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 struct Fly {
     id : u16,
-    passagere : Vec<Rejsende>,
+    rejsende : Vec<Rejsende>,
     baggage : Vec<Kuffert>,
 }
 
 impl Fly {
     // mangler metoder
-    fn new(id : u16, passagere : Vec<Rejsende>, baggage : Vec<Kuffert>) -> Self {
-        Fly{id, passagere, baggage}
+    fn new(id : u16, rejsende : Vec<Rejsende>, baggage : Vec<Kuffert>) -> Self {
+        Fly{id, rejsende, baggage}
     
+    }
+
+    fn load_passenger(&mut self, rejsende: Rejsende) {
+        self.rejsende.push(rejsende);
+        println!("Rejsende har nu bordet flyet med id: {}", self.id)
     }
     
     fn load_baggage(&mut self, baggage: Kuffert) {
@@ -39,6 +109,25 @@ impl Fly {
         println!("baggage er loaded på flyet! Baggage {:?}", self.baggage.last())
     }
 
+    fn depart(&self) {
+        println!("Flyet med id: {}, antal Passagerer : {} og antal Baggage {} ", self.id, self.rejsende.len(), self.baggage.len() );
+        sleep(time::Duration::from_millis(500));
+        println!("så er vi landet")
+    }
+
+    fn unload_passengers(&mut self) -> Vec<Rejsende> {
+        let passenger_after_landing = std::mem::take(&mut self.rejsende);
+        println!("passagerer bliver nu unloaded");
+
+        return  passenger_after_landing;
+    }
+
+    fn unload_baggage(&mut self) -> Vec<Kuffert> {
+        let baggage_after_landing = std::mem::take(&mut self.baggage);
+        println!("baggage er nu unloaded af flyet. Antal Baggage {}", baggage_after_landing.len());
+
+        return baggage_after_landing;
+    }
 }
 
 #[derive(Debug)]
