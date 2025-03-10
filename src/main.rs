@@ -5,12 +5,12 @@ use std::error::Error;
 use std::fs::{File, FileType};
 use std::ops::Index;
 use std::sync::{Arc, Mutex};
-use std::{result, string, thread};
+use std::{result, string, thread, vec};
 use std::thread::{sleep, JoinHandle};
 use std::io::Write;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Lufthavn {
     skranke: Vec<Skranke>,
     flights: Vec<Fly>,
@@ -45,7 +45,7 @@ impl Lufthavn {
         match self.file.lock() {
             Ok(mut file) => {
                 if let Err(e) = writeln!(file, "{}", msg) {
-                    println!("fail ved skriving til fil...")
+                    println!("fail ved skriving til fil... {}", e)
                 }
             }
 
@@ -85,7 +85,7 @@ impl Lufthavn {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Fly {
     id : u16,
     rejsende : Vec<Rejsende>,
@@ -94,8 +94,8 @@ struct Fly {
 
 impl Fly {
     // mangler metoder
-    fn new(id : u16, rejsende : Vec<Rejsende>, baggage : Vec<Kuffert>) -> Self {
-        Fly{id, rejsende, baggage}
+    fn new(id : u16) -> Self {
+        Fly{id, rejsende: Vec::new(), baggage: Vec::new()}
     
     }
 
@@ -130,7 +130,7 @@ impl Fly {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Skranke {
     id : u16,
     is_busy : bool,
@@ -155,7 +155,7 @@ impl Skranke {
 
 
         let mut rng = rand::thread_rng();
-        let random_delay_for_duration = rng.gen_range(100.. 500); // simulere virkeligheden i en lufthavn skranke hvor man aflevere baggage noget i den still
+        let random_delay_for_duration = rng.gen_range(400.. 1600); // simulere virkeligheden i en lufthavn skranke hvor man aflevere baggage noget i den still
         sleep(time::Duration::from_millis(random_delay_for_duration));
         println!("Vente tiden {}, i milisek btw", random_delay_for_duration);
         self.is_busy = false;
@@ -163,7 +163,7 @@ impl Skranke {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Rejsende {
     id : u16,
     navn: String,
@@ -177,7 +177,7 @@ impl Rejsende {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Terminal {
     id : u16,
     rejsende : Vec<Rejsende>,
@@ -186,6 +186,10 @@ struct Terminal {
 
 
 impl Terminal {
+    fn new(id: u16) -> Self {
+        Terminal{id, rejsende: Vec::new(), baggage:Vec::new()}
+    }
+
     fn pickup_baggage(&mut self, rejsende : &Rejsende, baggage: Kuffert) // tænker at vi skal bruge en mutable reference for at få fat i listen med rejsende og ændre den .
     {
         if let Some(i) = self.baggage.iter().position(|x| x.ejer_id == rejsende.id) {
@@ -195,7 +199,7 @@ impl Terminal {
     }
 } 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Kuffert {
     ejer_id : u16,
     beskrivelse : String,
@@ -210,6 +214,7 @@ impl Kuffert {
 
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let lufthavn_1 = Arc::new(Mutex::new(Lufthavn::new()));
 
     let mut rejsende1 = Rejsende::new(1, String::from("Chris"), None);
     let mut rejsende2 = Rejsende::new(2, String::from("Nat"), None);
@@ -221,14 +226,62 @@ fn main() -> Result<(), Box<dyn Error>> {
     let kuffert3 = Kuffert::new(rejsende3.id, String::from("Brun Lille Kuffert"));
     let kuffert4 = Kuffert::new(rejsende4.id , String::from("Rød Stor Kuffert"));
 
-    rejsende1.kuffert = Some(kuffert1);
-    rejsende2.kuffert = Some(kuffert2);
-    rejsende3.kuffert = Some(kuffert3);
-    rejsende4.kuffert = Some(kuffert4);
+    rejsende1.kuffert = Some(kuffert1.clone());
+    rejsende2.kuffert = Some(kuffert2.clone());
+    rejsende3.kuffert = Some(kuffert3.clone());
+    rejsende4.kuffert = Some(kuffert4.clone());
 
-    println!("hele rejsnde passeger : {:?}", rejsende1); // testede lige for at se om det virkede, implementede derfor debug
-
+    // boooking 
+    let mut lufthavn = lufthavn_1.lock().unwrap();
+    lufthavn.book(rejsende1.clone(), String::from("Germany"));
+    lufthavn.book(rejsende2.clone(), String::from("Germany"));
+    lufthavn.book(rejsende3.clone(), String::from("Germany"));
+    lufthavn.book(rejsende4.clone(), String::from("Germany"));
+    lufthavn.flights.push(Fly::new(1));
+    drop(lufthavn); // freee em up
     
+    let lufthavn_clon = Arc::clone(&lufthavn_1); // ref til tråedene
+    let mut handles = Vec::new();
+    let mut baggage_to_processs = vec![(kuffert1, String::from("Germany")),
+    (kuffert2, String::from("Germany")),
+    (kuffert3, String::from("Germany")),
+    (kuffert4, String::from("Germany"))];
+
+    for i in 0..2 {
+        let lufthavn_clone = Arc::clone(&lufthavn_clon);
+        let assigned_baggage: Vec<(Kuffert, String)> = if i == 1 {
+            vec![baggage_to_processs.remove(0), baggage_to_processs.remove(0)]
+        } else {
+            vec![baggage_to_processs.remove(0), baggage_to_processs.remove(0)]
+        };
+        let handle = thread::spawn(move || {
+
+            let mut skranke = Skranke::new(i);
+            let mut lufthavn = lufthavn_clone.lock().unwrap();
+            
+            if let Some(fly) = lufthavn.flights.get_mut(0) {
+                for (baggage, dest ) in assigned_baggage {
+                    skranke.load_on_plane(baggage, dest, fly);
+                }
+            }
+
+        });
+
+        handles.push(handle);
+        let mut lufthavn = lufthavn_1.lock().unwrap();
+
+        lufthavn.skranke.push(Skranke::new(i));
+        
+        
+    }
+
+    for handle in handles {
+            handle.join().unwrap()
+        }
+
+    // mangler selve fly rejsen, terminal type
+
+
     Ok(())
 }
 
