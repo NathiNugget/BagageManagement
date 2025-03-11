@@ -100,8 +100,9 @@ impl Fly {
     }
 
     fn load_passenger(&mut self, rejsende: Rejsende) {
+        let rejsende_id = rejsende.id;
         self.rejsende.push(rejsende);
-        println!("Rejsende har nu bordet flyet med id: {}", self.id)
+        println!("Rejsende id: {} har nu bordet flyet med id: {}",rejsende_id, self.id)
     }
     
     fn load_baggage(&mut self, baggage: Kuffert) {
@@ -239,6 +240,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     lufthavn.book(rejsende4.clone(), String::from("Germany"));
     lufthavn.flights.push(Fly::new(1));
     drop(lufthavn); // freee em up
+
+    let mut lufthavn = lufthavn_1.lock().unwrap();
+    let mut booked_rejsende = lufthavn.rejsende.lock().unwrap();
+    let rejsende_to_boarding: Vec<Rejsende> = booked_rejsende.iter().cloned().collect();
+    drop(booked_rejsende);
+    if let Some(fly) = lufthavn.flights.get_mut(0) {
+        for rejsende in rejsende_to_boarding {
+            fly.load_passenger(rejsende);
+        }
+    }
+    drop(lufthavn); // freeee em
     
     let lufthavn_clon = Arc::clone(&lufthavn_1); // ref til tråedene
     let mut handles = Vec::new();
@@ -277,9 +289,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for handle in handles {
             handle.join().unwrap()
-        }
+    }
 
-    // mangler selve fly rejsen, terminal type
+    let mut lufthavn = lufthavn_1.lock().unwrap();
+    if let Some(fly) = lufthavn.flights.get_mut(0) {
+        fly.depart();
+    }
+    // landet igen
+
+
+    //terminal håndtering, få rejsende af flyet og baggage.
+
+    println!("{}", lufthavn.skranke.len());
 
 
     Ok(())
