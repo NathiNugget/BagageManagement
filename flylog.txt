@@ -1,0 +1,10 @@
+:Booking færdig
+:Boarding færdig
+:Starter skranker
+:Starter skranker til at behandle 4 baggage
+:Skranker færdige
+:Fly landet
+Baggage/kufferter og rejsende unloaded
+Baggage tilføjet til terminal 1
+: Rejsende afhenter baggage i terminal 1
+: SIMULERING DONE

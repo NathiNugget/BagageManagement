@@ -1,12 +1,10 @@
 use core::time;
-use std::fmt::format;
 use rand::Rng;
 use std::error::Error;
-use std::fs::{File, FileType};
-use std::ops::Index;
+use std::fs::{File};
 use std::sync::{Arc, Mutex};
-use std::{result, string, thread, vec};
-use std::thread::{sleep, JoinHandle};
+use std::{thread, vec};
+use std::thread::{sleep};
 use std::io::Write;
 
 
@@ -54,8 +52,7 @@ impl Lufthavn {
 
             }
         }
-        
-        println!("logged besked {}", msg);
+
     }
 
 
@@ -111,9 +108,9 @@ impl Fly {
     }
 
     fn depart(&self) {
-        println!("Flyet med id: {}, antal Passagerer : {} og antal Baggage {} ", self.id, self.rejsende.len(), self.baggage.len() );
-        sleep(time::Duration::from_millis(500));
-        println!("så er vi landet")
+        println!("Flyet med id: {}, antal Passagerer : {} og antal Baggage {}: LETTER NU", self.id, self.rejsende.len(), self.baggage.len() );
+        sleep(time::Duration::from_millis(2000));
+        println!("SÅ ER VI DER, VI ER LANDET")
     }
 
     fn unload_passengers(&mut self) -> Vec<Rejsende> {
@@ -217,16 +214,17 @@ impl Kuffert {
 fn main() -> Result<(), Box<dyn Error>> {
     let lufthavn_1 = Arc::new(Mutex::new(Lufthavn::new()));
 
+    // opret personer
     let mut rejsende1 = Rejsende::new(1, String::from("Chris"), None);
     let mut rejsende2 = Rejsende::new(2, String::from("Nat"), None);
     let mut rejsende3 = Rejsende::new(3, String::from("Jimmy"), None);
     let mut rejsende4 = Rejsende::new(4, String::from("Victoria"), None);
-
+    // opret baggage/kuffert
     let kuffert1 = Kuffert::new(rejsende1.id, String::from("Sort Kuffert"));
     let kuffert2 = Kuffert::new(rejsende2.id , String::from("Hvid Kuffert med apple klistermærke"));
     let kuffert3 = Kuffert::new(rejsende3.id, String::from("Brun Lille Kuffert"));
     let kuffert4 = Kuffert::new(rejsende4.id , String::from("Rød Stor Kuffert"));
-
+    // tildele baggagen
     rejsende1.kuffert = Some(kuffert1.clone());
     rejsende2.kuffert = Some(kuffert2.clone());
     rejsende3.kuffert = Some(kuffert3.clone());
@@ -239,8 +237,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     lufthavn.book(rejsende3.clone(), String::from("Germany"));
     lufthavn.book(rejsende4.clone(), String::from("Germany"));
     lufthavn.flights.push(Fly::new(1));
+    lufthavn.log(":Booking færdig".to_string());
     drop(lufthavn); // freee em up
 
+    // load/board rejsende 
     let mut lufthavn = lufthavn_1.lock().unwrap();
     let mut booked_rejsende = lufthavn.rejsende.lock().unwrap();
     let rejsende_to_boarding: Vec<Rejsende> = booked_rejsende.iter().cloned().collect();
@@ -249,8 +249,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         for rejsende in rejsende_to_boarding {
             fly.load_passenger(rejsende);
         }
+        lufthavn.log(":Boarding færdig".to_string());
     }
     drop(lufthavn); // freeee em
+    
+
+
+
+    {
+    let mut lufthavn = lufthavn_1.lock().unwrap();
+    lufthavn.log(":Starter skranker".to_string());
+    drop(lufthavn); 
+    }
     
     let lufthavn_clon = Arc::clone(&lufthavn_1); // ref til tråedene
     let mut handles = Vec::new();
@@ -258,7 +268,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     (kuffert2, String::from("Germany")),
     (kuffert3, String::from("Germany")),
     (kuffert4, String::from("Germany"))];
+    let amount_of_baggage = baggage_to_processs.len();
 
+    // log før threads starter {skrnaker}
+    {
+    let mut lufthavn = lufthavn_1.lock().unwrap();
+    lufthavn.log(format!(":Starter skranker til at behandle {} baggage", amount_of_baggage));
+    drop(lufthavn);
+    }
+
+    // oprettlse af threads for skranker, 2 skranker i dette tilfælde
     for i in 0..2 {
         let lufthavn_clone = Arc::clone(&lufthavn_clon);
         let assigned_baggage: Vec<(Kuffert, String)> = if i == 1 {
@@ -283,24 +302,78 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut lufthavn = lufthavn_1.lock().unwrap();
 
         lufthavn.skranke.push(Skranke::new(i));
-        
-        
     }
-
+    // venter på threads
     for handle in handles {
             handle.join().unwrap()
     }
 
+    {
     let mut lufthavn = lufthavn_1.lock().unwrap();
-    if let Some(fly) = lufthavn.flights.get_mut(0) {
-        fly.depart();
+    lufthavn.log(":Skranker færdige".to_string());
+    drop(lufthavn);
     }
-    // landet igen
 
 
-    //terminal håndtering, få rejsende af flyet og baggage.
+    // flyturen simuerling starter
+    {
+        let mut lufthavn = lufthavn_1.lock().unwrap();
+        if let Some(fly) = lufthavn.flights.get_mut(0) {
+            fly.depart();
+            lufthavn.log(":Fly landet".to_string());
+        }
+    }
 
-    println!("{}", lufthavn.skranke.len());
+
+
+    // terminal simulering del
+    {
+        let mut lufthavn = lufthavn_1.lock().unwrap();
+        if let Some(fly) = lufthavn.flights.get_mut(0) {
+            let un_load_rejsende = fly.unload_passengers();
+            let un_load_baggage = fly.unload_baggage();
+            lufthavn.log("Baggage/kufferter og rejsende unloaded".to_string());
+
+            // Opret terminal
+            {
+            let mut terminal = lufthavn.terminal.lock().unwrap();
+            terminal.push(Terminal::new(1));
+            let mut term = terminal.get_mut(0).unwrap();
+            }
+
+            // baggage til terminalen 
+            {
+                let mut terminal = lufthavn.terminal.lock().unwrap();
+                let mut term = terminal.get_mut(0).unwrap();
+                for baggage in un_load_baggage {
+                    term.baggage.push(baggage);
+                }
+                let terminal_id = term.id; // Gem terminal-id'et
+                drop(terminal); // Frigiv terminal-låsen
+                lufthavn.log(format!("Baggage tilføjet til terminal {}", terminal_id));
+            }
+            // rejsende i terminalesn
+            {
+                let mut terminal = lufthavn.terminal.lock().unwrap();
+                let mut term = terminal.get_mut(0).unwrap();
+                for rejsende in un_load_rejsende {
+                    term.rejsende.push(rejsende.clone());
+                    term.pickup_baggage(&rejsende, Kuffert::new(rejsende.id, String::from("zero")));
+                }
+                let terminal_id = term.id;
+                drop(terminal); 
+                lufthavn.log(format!(": Rejsende afhenter baggage i terminal {}", terminal_id));
+            }
+        }
+    }
+
+    // loggin status /check up efter simuerling 
+    let mut lufthavn = lufthavn_1.lock().unwrap();
+    lufthavn.log(": SIMULERING DONE".to_string());
+    println!("mennesker på flyet: {}", lufthavn.flights.get_mut(0).iter().count());
+    println!("Antal skranker brugt / threads: {}", lufthavn.skranke.len());
+    println!("Antal rejsende igennem lufthavnen: {}", lufthavn.rejsende.lock().unwrap().len());
+    println!("mennesker på flyet til sidste, for at sørge for at det er klar til næste: {:?}", lufthavn.flights.get_mut(0)); // som vi kan se så er vectorene tommme med de rejsende da de er landet og har fået deres baggage. 
 
 
     Ok(())
